@@ -21,6 +21,10 @@ const configSchema = z.object({
   REFRESH_TOKEN_SECRET: z.string().min(1, 'REFRESH_TOKEN_SECRET không được để trống'),
   ACCESS_TOKEN_EXPIRES_IN: z.string().min(1, 'ACCESS_TOKEN_EXPIRES_IN không được để trống'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().min(1, 'REFRESH_TOKEN_EXPIRES_IN không được để trống'),
+  ADMIN_NAME: z.string().min(1, 'ADMIN_NAME không được để trống'),
+  ADMIN_EMAIL: z.string().email('ADMIN_EMAIL không hợp lệ').min(1, 'ADMIN_EMAIL không được để trống'),
+  ADMIN_PASSWORD: z.string().min(1, 'ADMIN_PASSWORD không được để trống'),
+  ADMIN_PHONE_NUMBER: z.string().min(1, 'ADMIN_PHONE_NUMBER không được để trống'),
 });
 
 const configServer = configSchema.safeParse(process.env);
