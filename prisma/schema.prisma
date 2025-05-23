@@ -1,0 +1,664 @@
+// This is your Prisma schema file,
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================== ENUMS ==========================
+
+// Trạng thái đơn hàng - quản lý vòng đời của đơn hàng từ lúc tạo đến hoàn thành
+enum OrderStatus {
+  PENDING_CONFIRMATION // Chờ xác nhận
+  PENDING_PICKUP      // Chờ lấy hàng
+  PENDING_DELIVERY    // Đang giao hàng
+  DELIVERED          // Đã giao thành công
+  RETURNED          // Đã trả hàng
+  CANCELLED         // Đã hủy
+}
+
+// Loại mã xác thực - phân biệt mục đích sử dụng của mã verification
+enum VerificationCodeType {
+  REGISTER        // Mã xác thực đăng ký tài khoản
+  FORGOT_PASSWORD // Mã xác thực quên mật khẩu
+}
+
+// Trạng thái người dùng - quản lý quyền truy cập của user
+enum UserStatus {
+  ACTIVE  // Hoạt động bình thường
+  BLOCKED // Bị khóa tài khoản
+}
+
+// Phương thức HTTP - định nghĩa các method API được phép
+enum HTTPMethod {
+  GET
+  POST
+  PUT
+  DELETE
+  PATCH
+  OPTIONS
+  HEAD
+}
+
+// ========================== CORE TABLES ==========================
+
+// Bảng ngôn ngữ - hỗ trợ đa ngôn ngữ cho toàn bộ hệ thống
+// Phục vụ cho tính năng: internationalization (i18n)
+model Language {
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(100) // Tên ngôn ngữ (VD: "Tiếng Việt")
+  code String @unique @db.VarChar(10) // Mã ngôn ngữ (VD: "vi", "en")
+
+  // Audit fields - theo dõi người tạo/sửa
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime? // Soft delete
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  createdBy User? @relation("LanguageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("LanguageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  // Các bảng translation sử dụng ngôn ngữ này
+  userTranslations     UserTranslation[]
+  productTranslations  ProductTranslation[]
+  categoryTranslations CategoryTranslation[]
+  brandTranslations    BrandTranslation[]
+
+  @@map("Language")
+}
+
+// Bảng người dùng - lưu thông tin cơ bản của user
+// Phục vụ cho tính năng: authentication, authorization, user management
+model User {
+  id          Int        @id @default(autoincrement())
+  email       String     @unique @db.VarChar(255)
+  name        String     @db.VarChar(255)
+  password    String     @db.VarChar(255) // Hash password
+  phoneNumber String?    @db.VarChar(20)
+  avatar      String?    @db.Text // URL ảnh đại diện
+  totpSecret  String?    @db.VarChar(255) // Secret cho 2FA
+  status      UserStatus @default(ACTIVE)
+
+  // Role-based access control
+  roleId Int?
+  role Role? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-referencing relations cho audit
+  createdBy User? @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  // Reverse relations
+  createdUsers     User[] @relation("UserCreatedBy")
+  updatedUsers     User[] @relation("UserUpdatedBy")
+  createdLanguages Language[] @relation("LanguageCreatedBy")
+  updatedLanguages Language[] @relation("LanguageUpdatedBy")
+
+  // User-specific data
+  translations UserTranslation[] // Thông tin đa ngôn ngữ của user
+  refreshTokens RefreshToken[]   // JWT refresh tokens
+  cartItems     CartItem[]       // Giỏ hàng
+  orders        Order[]          // Đơn hàng của user
+  reviews       Review[]         // Đánh giá sản phẩm
+
+  // Audit relations cho các bảng khác
+  createdPermissions      Permission[]         @relation("PermissionCreatedBy")
+  updatedPermissions      Permission[]         @relation("PermissionUpdatedBy")
+  createdRoles           Role[]               @relation("RoleCreatedBy")
+  updatedRoles           Role[]               @relation("RoleUpdatedBy")
+  createdProducts        Product[]            @relation("ProductCreatedBy")
+  updatedProducts        Product[]            @relation("ProductUpdatedBy")
+  createdProductTrans    ProductTranslation[] @relation("ProductTranslationCreatedBy")
+  updatedProductTrans    ProductTranslation[] @relation("ProductTranslationUpdatedBy")
+  createdCategories      Category[]           @relation("CategoryCreatedBy")
+  updatedCategories      Category[]           @relation("CategoryUpdatedBy")
+  createdCategoryTrans   CategoryTranslation[] @relation("CategoryTranslationCreatedBy")
+  updatedCategoryTrans   CategoryTranslation[] @relation("CategoryTranslationUpdatedBy")
+  createdVariants        Variant[]            @relation("VariantCreatedBy")
+  updatedVariants        Variant[]            @relation("VariantUpdatedBy")
+  createdVariantOptions  VariantOption[]      @relation("VariantOptionCreatedBy")
+  updatedVariantOptions  VariantOption[]      @relation("VariantOptionUpdatedBy")
+  createdSKUs            SKU[]                @relation("SKUCreatedBy")
+  updatedSKUs            SKU[]                @relation("SKUUpdatedBy")
+  createdBrands          Brand[]              @relation("BrandCreatedBy")
+  updatedBrands          Brand[]              @relation("BrandUpdatedBy")
+  createdBrandTrans      BrandTranslation[]   @relation("BrandTranslationCreatedBy")
+  updatedBrandTrans      BrandTranslation[]   @relation("BrandTranslationUpdatedBy")
+  createdOrders          Order[]              @relation("OrderCreatedBy")
+  updatedOrders          Order[]              @relation("OrderUpdatedBy")
+  createdUserTrans       UserTranslation[]    @relation("UserTranslationCreatedBy")
+  updatedUserTrans       UserTranslation[]    @relation("UserTranslationUpdatedBy")
+
+  // Messaging system
+  sentMessages     Message[] @relation("MessageFrom")
+  receivedMessages Message[] @relation("MessageTo")
+
+  @@map("User")
+}
+
+// Bảng thông tin đa ngôn ngữ của user - lưu address, description theo ngôn ngữ
+// Phục vụ cho tính năng: đa ngôn ngữ thông tin user
+model UserTranslation {
+  id          Int    @id @default(autoincrement())
+  userId      Int
+  languageId  Int
+  address     String? @db.Text // Địa chỉ
+  description String? @db.Text // Mô tả bản thân
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language Language  @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("UserTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?    @relation("UserTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, languageId]) // Mỗi user chỉ có 1 bản dịch cho 1 ngôn ngữ
+  @@map("UserTranslation")
+}
+
+// ========================== AUTHENTICATION TABLES ==========================
+
+// Bảng mã xác thực - lưu OTP cho đăng ký và quên mật khẩu
+// Phục vụ cho tính năng: email verification, password reset
+model VerificationCode {
+  id        Int                  @id @default(autoincrement())
+  email     String               @db.VarChar(255)
+  code      String               @db.VarChar(10) // Mã OTP
+  type      VerificationCodeType // Phân loại mục đích sử dụng
+  expiresAt DateTime             // Thời gian hết hạn
+  createdAt DateTime             @default(now())
+
+  @@index([email, code, type]) // Tối ưu query verification
+  @@index([expiresAt]) // Tối ưu cleanup expired codes
+  @@map("VerificationCode")
+}
+
+// Bảng refresh token - quản lý JWT refresh tokens
+// Phục vụ cho tính năng: JWT authentication, token rotation
+model RefreshToken {
+  token     String   @id @db.VarChar(500) // JWT token
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt]) // Tối ưu cleanup expired tokens
+  @@map("RefreshToken")
+}
+
+// ========================== RBAC TABLES ==========================
+
+// Bảng quyền - định nghĩa các quyền truy cập API endpoints
+// Phục vụ cho tính năng: role-based access control (RBAC)
+model Permission {
+  id          Int        @id @default(autoincrement())
+  name        String     @db.VarChar(100) // Tên quyền (VD: "create_product")
+  description String?    @db.Text // Mô tả quyền
+  path        String     @db.VarChar(255) // API endpoint path
+  method      HTTPMethod // HTTP method
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy User? @relation("PermissionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("PermissionUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  roles     PermissionRole[] // Many-to-many với Role
+
+  @@unique([path, method]) // Mỗi endpoint chỉ có 1 permission
+  @@map("Permission")
+}
+
+// Bảng vai trò - nhóm các quyền lại thành role
+// Phục vụ cho tính năng: quản lý phân quyền theo vai trò
+model Role {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100) // Tên role (VD: "admin", "customer")
+  description String? @db.Text
+  isActive    Boolean @default(true) // Có thể tạm khóa role
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy   User?            @relation("RoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?            @relation("RoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  users       User[]           // Users có role này
+  permissions PermissionRole[] // Many-to-many với Permission
+
+  @@map("Role")
+}
+
+// Bảng trung gian - liên kết Permission và Role (many-to-many)
+// Phục vụ cho tính năng: gán quyền cho role
+model PermissionRole {
+  permissionId Int
+  roleId       Int
+
+  // Relations
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([permissionId, roleId]) // Composite primary key
+  @@map("PermissionsRoles")
+}
+
+// ========================== PRODUCT CATALOG TABLES ==========================
+
+// Bảng thương hiệu - quản lý các brand/nhãn hiệu sản phẩm
+// Phục vụ cho tính năng: phân loại sản phẩm theo thương hiệu
+model Brand {
+  id   Int     @id @default(autoincrement())
+  logo String? @db.Text // URL logo thương hiệu
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy    User?              @relation("BrandCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?              @relation("BrandUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  translations BrandTranslation[] // Thông tin đa ngôn ngữ
+  products     Product[]          // Sản phẩm của thương hiệu
+
+  @@map("Brand")
+}
+
+// Bảng thông tin đa ngôn ngữ của thương hiệu
+// Phục vụ cho tính năng: hiển thị tên, mô tả brand theo ngôn ngữ
+model BrandTranslation {
+  id          Int    @id @default(autoincrement())
+  brandId     Int
+  languageId  Int
+  name        String @db.VarChar(255) // Tên thương hiệu
+  description String? @db.Text        // Mô tả thương hiệu
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  brand     Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  language  Language  @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("BrandTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?     @relation("BrandTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([brandId, languageId])
+  @@map("BrandTranslation")
+}
+
+// Bảng danh mục - cấu trúc cây phân cấp để tổ chức sản phẩm
+// Phục vụ cho tính năng: phân loại sản phẩm theo danh mục cha-con
+model Category {
+  id               Int  @id @default(autoincrement())
+  parentCategoryId Int? // Self-referencing cho cấu trúc cây
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  parentCategory Category?             @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: SetNull)
+  childCategories Category[]           @relation("CategoryHierarchy")
+  createdBy      User?                @relation("CategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      User?                @relation("CategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  translations   CategoryTranslation[] // Thông tin đa ngôn ngữ
+  products       ProductCategory[]     // Many-to-many với Product
+
+  @@map("Category")
+}
+
+// Bảng thông tin đa ngôn ngữ của danh mục
+// Phục vụ cho tính năng: hiển thị tên, mô tả danh mục theo ngôn ngữ
+model CategoryTranslation {
+  id          Int    @id @default(autoincrement())
+  categoryId  Int
+  languageId  Int
+  name        String @db.VarChar(255) // Tên danh mục
+  description String? @db.Text        // Mô tả danh mục
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  language  Language  @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("CategoryTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?     @relation("CategoryTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([categoryId, languageId])
+  @@map("CategoryTranslation")
+}
+
+// Bảng sản phẩm chính - thông tin cơ bản của sản phẩm
+// Phục vụ cho tính năng: quản lý catalog sản phẩm
+model Product {
+  id           Int     @id @default(autoincrement())
+  base_price   Float   @db.DoublePrecision // Giá gốc sản phẩm
+  virtual_price Float?  @db.DoublePrecision // Giá ảo (để hiển thị giảm giá)
+  brandId      Int?
+  images       String[] // Array URL hình ảnh sản phẩm
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  brand        Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  createdBy    User?                 @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?                 @relation("ProductUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  translations ProductTranslation[]  // Thông tin đa ngôn ngữ
+  categories   ProductCategory[]     // Many-to-many với Category
+  variants     Variant[]             // Các biến thể (size, color, etc.)
+  skus         SKU[]                 // Stock Keeping Units
+  reviews      Review[]              // Đánh giá sản phẩm
+
+  @@map("Product")
+}
+
+// Bảng thông tin đa ngôn ngữ của sản phẩm
+// Phục vụ cho tính năng: hiển thị tên, mô tả sản phẩm theo ngôn ngữ
+model ProductTranslation {
+  id          Int    @id @default(autoincrement())
+  productId   Int
+  languageId  Int
+  name        String @db.VarChar(500) // Tên sản phẩm
+  description String? @db.Text        // Mô tả sản phẩm
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  language  Language  @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("ProductTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?     @relation("ProductTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([productId, languageId])
+  @@map("ProductTranslation")
+}
+
+// Bảng trung gian - liên kết Product và Category (many-to-many)
+// Phục vụ cho tính năng: sản phẩm có thể thuộc nhiều danh mục
+model ProductCategory {
+  productId  Int
+  categoryId Int
+
+  // Relations
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@map("ProductsCategories")
+}
+
+// ========================== PRODUCT VARIANT TABLES ==========================
+
+// Bảng biến thể - định nghĩa các thuộc tính có thể thay đổi của sản phẩm
+// Phục vụ cho tính năng: quản lý biến thể sản phẩm (size, color, material, etc.)
+model Variant {
+  id        Int    @id @default(autoincrement())
+  name      String @db.VarChar(100) // Tên biến thể (VD: "Size", "Color")
+  productId Int
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation("VariantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?           @relation("VariantUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  options   VariantOption[] // Các giá trị có thể của biến thể
+
+  @@map("Variant")
+}
+
+// Bảng giá trị biến thể - các option cụ thể của từng biến thể
+// Phục vụ cho tính năng: lưu giá trị cụ thể (VD: "L", "XL" cho Size)
+model VariantOption {
+  id        Int    @id @default(autoincrement())
+  value     String @db.VarChar(100) // Giá trị biến thể (VD: "Red", "Large")
+  variantId Int
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  variant   Variant           @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("VariantOptionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?             @relation("VariantOptionUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  skus      SKUVariantOption[] // Many-to-many với SKU
+
+  @@map("VariantOption")
+}
+
+// Bảng SKU - Stock Keeping Unit, đại diện cho từng biến thể cụ thể có thể bán
+// Phục vụ cho tính năng: quản lý tồn kho, giá bán theo từng biến thể
+model SKU {
+  id        Int      @id @default(autoincrement())
+  value     String   @db.VarChar(100) // Mã SKU (VD: "SHIRT-RED-L")
+  price     Float    @db.DoublePrecision // Giá bán cụ thể
+  stock     Int      @default(0) // Số lượng tồn kho
+  images    String[] // Hình ảnh riêng cho SKU này
+  productId Int
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  product        Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy      User?               @relation("SKUCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      User?               @relation("SKUUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  variantOptions SKUVariantOption[]  // Many-to-many với VariantOption
+  cartItems      CartItem[]          // Items trong giỏ hàng
+  snapshots      ProductSKUSnapshot[] // Snapshot cho đơn hàng
+
+  @@unique([value]) // Mã SKU phải unique
+  @@map("SKU")
+}
+
+// Bảng trung gian - liên kết SKU với các VariantOption
+// Phục vụ cho tính năng: SKU được tạo từ combination các variant option
+model SKUVariantOption {
+  skuId           Int
+  variantOptionId Int
+
+  // Relations
+  sku           SKU           @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  variantOption VariantOption @relation(fields: [variantOptionId], references: [id], onDelete: Cascade)
+
+  @@id([skuId, variantOptionId])
+  @@map("SkusVariantOptions")
+}
+
+// ========================== ORDER MANAGEMENT TABLES ==========================
+
+// Bảng giỏ hàng - lưu sản phẩm user chọn mua
+// Phục vụ cho tính năng: shopping cart, lưu trạng thái giỏ hàng
+model CartItem {
+  id       Int @id @default(autoincrement())
+  quantity Int @default(1) // Số lượng
+  skuId    Int
+  userId   Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sku  SKU  @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([skuId, userId]) // User chỉ có 1 item cho 1 SKU
+  @@map("CartItem")
+}
+
+// Bảng đơn hàng - thông tin đơn hàng của khách
+// Phục vụ cho tính năng: order management, tracking
+model Order {
+  id     Int         @id @default(autoincrement())
+  userId Int
+  status OrderStatus @default(PENDING_CONFIRMATION)
+
+  // Audit fields
+  createdById Int?
+  updatedById Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?                @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  snapshots ProductSKUSnapshot[] // Snapshot sản phẩm tại thời điểm đặt hàng
+
+  @@map("Order")
+}
+
+// Bảng snapshot sản phẩm - lưu thông tin sản phẩm tại thời điểm đặt hàng
+// Phục vụ cho tính năng: đảm bảo thông tin đơn hàng không thay đổi khi sản phẩm cập nhật
+model ProductSKUSnapshot {
+  id          Int      @id @default(autoincrement())
+  productName String   @db.VarChar(500) // Tên sản phẩm tại thời điểm đặt
+  price       Float    @db.DoublePrecision // Giá tại thời điểm đặt
+  images      String[] // Hình ảnh tại thời điểm đặt
+  skuValue    String   @db.VarChar(100) // SKU value tại thời điểm đặt
+  skuId       Int
+  orderId     Int
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  sku   SKU   @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("ProductSKUSnapshot")
+}
+
+// ========================== REVIEW & COMMUNICATION TABLES ==========================
+
+// Bảng đánh giá sản phẩm - feedback từ khách hàng
+// Phục vụ cho tính năng: product review, rating system
+model Review {
+  id        Int    @id @default(autoincrement())
+  content   String @db.Text // Nội dung đánh giá
+  rating    Int    // Điểm đánh giá (1-5 sao)
+  productId Int
+  userId    Int
+
+  deletedAt DateTime? // Soft delete
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("Review")
+}
+
+// Bảng tin nhắn - hệ thống chat giữa users
+// Phục vụ cho tính năng: customer support, user communication
+model Message {
+  id         Int       @id @default(autoincrement())
+  fromUserId Int
+  toUserId   Int
+  content    String    @db.Text // Nội dung tin nhắn
+  readAt     DateTime? // Thời gian đọc tin nhắn
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  fromUser User @relation("MessageFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("MessageTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([fromUserId, toUserId]) // Tối ưu query conversation
+  @@index([readAt]) // Tối ưu query unread messages
+  @@map("Message")
+}
+
+// ========================== PAYMENT TABLES ==========================
+
+// Bảng giao dịch thanh toán - log tất cả giao dịch tài chính
+// Phục vụ cho tính năng: payment processing, financial tracking, reconciliation
+model PaymentTransaction {
+  id                 Int      @id @default(autoincrement())
+  gateway            String   @db.VarChar(50) // Cổng thanh toán (VD: "VNPay", "Momo")
+  transactionDate    DateTime @default(now()) // Thời gian giao dịch
+  accountNumber      String?  @db.VarChar(50) // Số tài khoản
+  subAccount         String?  @db.VarChar(50) // Tài khoản phụ
+  amountIn           Int      @default(0) // Tiền vào (VND, đơn vị: đồng)
+  amountOut          Int      @default(0) // Tiền ra (VND, đơn vị: đồng)
+  accumulated        Int      @default(0) // Số dư tích lũy
+  code               String?  @db.VarChar(100) // Mã giao dịch từ gateway
+  transactionContent String?  @db.Text // Nội dung giao dịch
+  referenceNumber    String?  @db.VarChar(100) // Số tham chiếu
+  body               String?  @db.Text // Raw response từ gateway (JSON)
+
+  createdAt DateTime @default(now())
+
+  @@index([gateway, transactionDate]) // Tối ưu query theo gateway và thời gian
+  @@index([code]) // Tối ưu query theo mã giao dịch
+  @@index([referenceNumber]) // Tối ưu query theo số tham chiếu
+  @@map("PaymentTransaction")
+}
