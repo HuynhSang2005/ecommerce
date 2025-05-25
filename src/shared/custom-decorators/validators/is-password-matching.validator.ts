@@ -35,7 +35,7 @@
 
 import { z } from 'zod';
 
-export const passwordMatchingSchema = z.object({
+export const IsPasswordMatching = z.object({
   password: z
     .string()
     .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
@@ -49,4 +49,4 @@ export const passwordMatchingSchema = z.object({
   path: ['confirmPassword'], // Lỗi sẽ hiển thị ở trường confirmPassword
 });
 
-export type PasswordMatchingInput = z.infer<typeof passwordMatchingSchema>;
+export type PasswordMatchingInput = z.infer<typeof IsPasswordMatching>;
