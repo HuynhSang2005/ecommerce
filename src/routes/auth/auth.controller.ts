@@ -24,11 +24,11 @@ export class AuthController {
   //   return await this.authService.logout(body);
   // }
 
-  @Post('refresh-token')
-  @HttpCode(HttpStatus.OK)
-  async refreshToken(@Body() body: any) {
-    return await this.authService.refreshToken(body);
-  }
+  // @Post('refresh-token')
+  // @HttpCode(HttpStatus.OK)
+  // async refreshToken(@Body() body: any) {
+  //   return await this.authService.refreshToken(body);
+  // }
 
   
 }

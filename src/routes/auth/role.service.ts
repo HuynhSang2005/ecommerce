@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { RoleName } from 'src/shared/constants/role.constant';
-import { PrismaService } from 'src/shared/services/prisma.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { RoleName } from '../../shared/constants/role.constant'; 
+import { PrismaService } from '../../shared/services/prisma.service'; 
 
 @Injectable()
 export class RoleService {
@@ -8,20 +8,28 @@ export class RoleService {
 
   constructor(private readonly prismaService: PrismaService) {}
 
-  async getClientRoles() {
-    if(this.clientRolesId) {
+  async getClientRoles(): Promise<number> {
+    if (this.clientRolesId) {
       return this.clientRolesId;
     }
 
-    const role = await this.prismaService.role.findUniqueOrThrow({
-      where: {
-        name: RoleName.Client,
-      },
-    })
+    try {
+      const role = await this.prismaService.role.findFirst({
+        where: {
+          name: RoleName.Client,
+        },
+      });
 
-    this.clientRolesId = role.id;
-    return role.id;
+      if (!role) {
+        throw new NotFoundException(`Role ${RoleName.Client} not found. Please run init script first.`);
+      }
+
+      this.clientRolesId = role.id;
+      return role.id;
+      
+    } catch (error) {
+      console.error('❌ Error finding CLIENT role:', error);
+      throw new NotFoundException(`Role ${RoleName.Client} not found. Please run init script first.`);
+    }
   }
-
-
 }

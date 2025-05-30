@@ -1,27 +1,94 @@
 services:
+  # PostgreSQL Database
   postgres:
-    image: postgres:17
+    image: postgres:17-alpine
     container_name: postgres_ecommerce
     restart: unless-stopped
+    
     environment:
       POSTGRES_USER: nguyenhuynhsang
       POSTGRES_PASSWORD: nguyenhuynhsang
       POSTGRES_DB: Ecommerce
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    
     ports:
       - "5002:5432"
+    
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    
     networks:
-      - backend
+      - ecommerce_network
+    
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nguyenhuynhsang"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U nguyenhuynhsang -d Ecommerce"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    # Giới hạn tài nguyên cơ bản
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: redis_ecommerce
+    restart: unless-stopped
+    
+    ports:
+      - "6379:6379"
+    
+    volumes:
+      - redis_data:/data
+    
+    networks:
+      - ecommerce_network
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
 
+  # pgAdmin for database management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_ecommerce
+    restart: unless-stopped
+    
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ecommerce.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    
+    ports:
+      - "5050:80"
+    
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    
+    networks:
+      - ecommerce_network
+    
+    depends_on:
+      - postgres
+    
+    # Chỉ chạy trong môi trường development
+    profiles:
+      - dev
+
+# Volumes
 volumes:
-  pg_data:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
 
+# Networks
 networks:
-  backend:
+  ecommerce_network:
     driver: bridge

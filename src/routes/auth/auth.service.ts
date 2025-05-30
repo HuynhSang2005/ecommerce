@@ -13,79 +13,76 @@ import { TokenService } from '../../shared/services/token.service';
 import { AuthTokens } from '../../shared/types/jwt.type';
 import { isNotFoundPrismaError, isUniqueConstraintPrismaError } from '../../shared/types/helper';
 import { RoleService } from './role.service';
+import { RegisterBodyType } from './auth.model';
+import { AuthRepository } from './repo/auth.repo';
 
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly hashingService: HashingService,
-    private readonly prismaService: PrismaService,
     private readonly tokenService: TokenService,
+    private readonly authRepository: AuthRepository,
     private readonly roleService: RoleService, 
   ) {}
 
-  async generateToken(payload: { userId: number }): Promise<AuthTokens> {
-    const [accessToken, refreshToken] = await Promise.all([
-      this.tokenService.signAccessToken(payload),
-      this.tokenService.signRefreshToken(payload),
-    ]);
+  // async generateToken(payload: { userId: number }): Promise<AuthTokens> {
+  //   const [accessToken, refreshToken] = await Promise.all([
+  //     this.tokenService.signAccessToken(payload),
+  //     this.tokenService.signRefreshToken(payload),
+  //   ]);
 
-    await this.prismaService.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: payload.userId,
+  //   await this.prismaService.refreshToken.create({
+  //     data: {
+  //       token: refreshToken,
+  //       userId: payload.userId,
 
-      },
+  //     },
+  //   });
+    
+  //   return { accessToken, refreshToken };
+  // }
+  
+  // async refreshToken(refreshToken: string) {
+  //   try {
+  //     const {userId} = await this.tokenService.verifyRefreshToken(refreshToken);
+  //     await this.prismaService.refreshToken.findUniqueOrThrow({
+  //       where: {
+  //         token: refreshToken,
+  //       }
+  //     })
+
+  //     await this.prismaService.refreshToken.delete({
+  //       where: {
+  //         token: refreshToken,
+  //       }
+  //     });
+
+  //     return await this.generateToken({ userId });
+  //   } catch (error) {
+  //     if(isNotFoundPrismaError(error)) {
+  //       throw new UnauthorizedException('Refresh token không tồn tại hoặc đã hết hạn.');
+  //     }
+  //     throw new UnauthorizedException()
+  //   }
+  // }
+
+async register(body: RegisterBodyType) {
+  const hashedPassword = await this.hashingService.hash(body.password);
+
+  try {
+    const clientRoleId = await this.roleService.getClientRoles();
+    
+    // Remove confirmPassword before creating user
+    const { confirmPassword, ...userData } = body;
+    
+    return await this.authRepository.createUser({
+      ...userData,
+      password: hashedPassword,
+      roleId: clientRoleId,
     });
     
-    return { accessToken, refreshToken };
-  }
-  
-  async refreshToken(refreshToken: string) {
-    try {
-      const {userId} = await this.tokenService.verifyRefreshToken(refreshToken);
-      await this.prismaService.refreshToken.findUniqueOrThrow({
-        where: {
-          token: refreshToken,
-        }
-      })
-
-      await this.prismaService.refreshToken.delete({
-        where: {
-          token: refreshToken,
-        }
-      });
-
-      return await this.generateToken({ userId });
-    } catch (error) {
-      if(isNotFoundPrismaError(error)) {
-        throw new UnauthorizedException('Refresh token không tồn tại hoặc đã hết hạn.');
-      }
-      throw new UnauthorizedException()
-    }
-  }
-
-  async register(body: any) {
-    // const { email, password, name, phoneNumber } = registerUserDto;
-
-    const hashedPassword = await this.hashingService.hash(body.password);
-
-    try {
-      const clientRoleId = await this.roleService.getClientRoles();
-      const newUser = await this.prismaService.user.create({
-        data: {
-          email: body.email,
-          password: hashedPassword,
-          name: body.name,
-          phoneNumber: body.phoneNumber,
-          roleId: clientRoleId, // role mặc định là Client
-        },
-        omit: {
-          totpSecret: true,
-        }
-      });
-      return newUser;
-    } catch (error) {
+  } catch (error) {
       if (isUniqueConstraintPrismaError(error)) {
         const target = error.meta?.target as string[] | undefined;
         if (target?.includes('email')) {
@@ -93,10 +90,11 @@ export class AuthService {
         }
         throw new ConflictException('Thông tin đăng ký bị trùng lặp.');
       }
+      
       console.error("Lỗi Prisma khi đăng ký:", error);
-      throw new InternalServerErrorException('Không thể tạo tài khoản do lỗi cơ sở dữ liệu.');
+      throw error; 
     }
-  }
+}
 
   // async login(body: LoginUserDto): Promise<AuthTokens> {
   //   const { email, password } = body;

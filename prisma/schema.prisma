@@ -30,6 +30,7 @@ enum VerificationCodeType {
 // Trạng thái người dùng - quản lý quyền truy cập của user
 enum UserStatus {
   ACTIVE  // Hoạt động bình thường
+  INACTIVE // Tạm ngưng hoạt động
   BLOCKED // Bị khóa tài khoản
 }
 
@@ -86,15 +87,15 @@ model User {
   status      UserStatus @default(ACTIVE)
 
   // Role-based access control
-  roleId Int?
-  role Role? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  roleId Int
+  role Role @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   // Audit fields
   createdById Int?
   updatedById Int?
-  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
 
   // Self-referencing relations cho audit
   createdBy User? @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
