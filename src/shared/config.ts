@@ -25,6 +25,7 @@ const configSchema = z.object({
   ADMIN_EMAIL: z.string().email('ADMIN_EMAIL không hợp lệ').min(1, 'ADMIN_EMAIL không được để trống'),
   ADMIN_PASSWORD: z.string().min(1, 'ADMIN_PASSWORD không được để trống'),
   ADMIN_PHONE_NUMBER: z.string().min(1, 'ADMIN_PHONE_NUMBER không được để trống'),
+  OTP_EXPIRES_IN: z.string().min(1, 'OTP_EXPIRATION_TIME không được để trống'),
 });
 
 const configServer = configSchema.safeParse(process.env);

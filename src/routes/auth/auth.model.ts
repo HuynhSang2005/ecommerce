@@ -1,27 +1,6 @@
-import { z } from 'zod'
-import { UserStatus as PrismaUserStatus, UserStatus } from '@prisma/client' 
-
-export { UserStatus } from '@prisma/client' // sử enum từ prisma để đảm bảo consistency
-
-// Base User Schema
-const UserSchema = z.object({
-  id: z.number(),
-  email: z.string().email(),
-  name: z.string().min(1).max(100),
-  password: z.string().min(6).max(100),
-  phoneNumber: z.string().min(9).max(15).nullable().optional(), 
-  avatar: z.string().nullable().optional(),
-  totpSecret: z.string().nullable().optional(),
-  status: z.nativeEnum(UserStatus).default(UserStatus.ACTIVE), 
-  roleId: z.number().positive(),
-  createdById: z.number().nullable().optional(), 
-  updatedById: z.number().nullable().optional(), 
-  createdAt: z.date().optional(), 
-  updatedAt: z.date().optional(),
-  deletedAt: z.date().nullable().optional(),
-})
-
-export type UserType = z.infer<typeof UserSchema>
+import { number, z } from 'zod'
+import { UserSchema } from  'src/shared/models/shared-user.model'
+import { VerificationCodeType as PrismaVerificationCode } from '@prisma/client'
 
 // Register Request Schema
 export const RegisterBodySchema = UserSchema
@@ -96,3 +75,21 @@ export const LoginResponseSchema = z.object({
 })
 
 export type LoginResponseType = z.infer<typeof LoginResponseSchema>
+
+export const VerificationCode = z.object({
+  id: number().positive(),
+  email: z.string().email(),
+  code: z.string().length(6),
+  type: z.nativeEnum(PrismaVerificationCode),
+  expiresAt: z.date(),
+  createdAt: z.date(),
+})
+
+export type VerificationCodeType = z.infer<typeof VerificationCode>
+
+export const SendOTPBodySchema = VerificationCode.pick({
+  email: true,
+  type: true,
+}).strict()
+
+export type SendOTPBodyType = z.infer<typeof SendOTPBodySchema>

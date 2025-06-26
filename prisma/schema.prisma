@@ -181,12 +181,13 @@ model UserTranslation {
 // Phục vụ cho tính năng: email verification, password reset
 model VerificationCode {
   id        Int                  @id @default(autoincrement())
-  email     String               @db.VarChar(255)
+  email     String               @unique @db.VarChar(255)  
   code      String               @db.VarChar(10) // Mã OTP
   type      VerificationCodeType // Phân loại mục đích sử dụng
   expiresAt DateTime             // Thời gian hết hạn
   createdAt DateTime             @default(now())
 
+  
   @@index([email, code, type]) // Tối ưu query verification
   @@index([expiresAt]) // Tối ưu cleanup expired codes
   @@map("VerificationCode")

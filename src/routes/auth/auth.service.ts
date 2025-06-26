@@ -4,18 +4,19 @@ import {
   InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { HashingService } from '../../shared/services/hashing.service';
-import { PrismaService } from '../../shared/services/prisma.service';
-// import { LoginUserDto, RegisterUserDto } from './dto/auth.dto';
-import { User } from '@prisma/client';
 import { TokenService } from '../../shared/services/token.service';
 import { AuthTokens } from '../../shared/types/jwt.type';
-import { isNotFoundPrismaError, isUniqueConstraintPrismaError } from '../../shared/types/helper';
+import { generateOTP, isNotFoundPrismaError, isUniqueConstraintPrismaError } from '../../shared/types/helper';
 import { RoleService } from './role.service';
-import { RegisterBodyType } from './auth.model';
-import { AuthRepository } from './repo/auth.repo';
-
+import { RegisterBodyType, SendOTPBodyType } from './auth.model';
+import { AuthRepository } from './repository/auth.repo';
+import { SharedUserRepository } from 'src/shared/repositories/shared-user.repo';
+import { addMilliseconds } from 'date-fns';
+import ms from 'ms';
+import envConfig from 'src/shared/config';
 
 @Injectable()
 export class AuthService {
@@ -23,7 +24,8 @@ export class AuthService {
     private readonly hashingService: HashingService,
     private readonly tokenService: TokenService,
     private readonly authRepository: AuthRepository,
-    private readonly roleService: RoleService, 
+    private readonly roleService: RoleService,
+    private readonly shareUserRepository: SharedUserRepository
   ) {}
 
   // async generateToken(payload: { userId: number }): Promise<AuthTokens> {
@@ -73,7 +75,6 @@ async register(body: RegisterBodyType) {
   try {
     const clientRoleId = await this.roleService.getClientRoles();
     
-    // Remove confirmPassword before creating user
     const { confirmPassword, ...userData } = body;
     
     return await this.authRepository.createUser({
@@ -92,9 +93,37 @@ async register(body: RegisterBodyType) {
       }
       
       console.error("Lỗi Prisma khi đăng ký:", error);
-      throw error; 
+      throw new UnprocessableEntityException([
+      {
+        message: 'Email đã được sử dụng hoặc thông tin đăng ký không hợp lệ.',
+        path: 'email',
+      }
+      ]); 
     }
 }
+  async sendOTP(body: SendOTPBodyType) {
+    const user = await this.shareUserRepository.findUnique({
+      email: body.email,
+    });
+    if (user) {
+      throw new UnprocessableEntityException([
+      {
+        message: 'Email đã được sử dụng hoặc thông tin đăng ký không hợp lệ.',
+        path: 'email',
+      }
+      ]); 
+    }
+    
+    const code = generateOTP();
+    const verificationCode = this.authRepository.createVerificationCode({
+      email: body.email,
+      type: body.type,
+      code,
+      expiresAt: addMilliseconds(new Date(), ms(envConfig.OTP_EXPIRES_IN)), 
+    })
+    
+    return verificationCode;
+  }
 
   // async login(body: LoginUserDto): Promise<AuthTokens> {
   //   const { email, password } = body;

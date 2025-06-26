@@ -1,6 +1,6 @@
 import { Body, ClassSerializerInterceptor, ConflictException, Controller, HttpCode, HttpStatus, InternalServerErrorException, NotFoundException, Post, SerializeOptions, UnauthorizedException, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterBodyDto, RegisterResponseDto } from './DTO/auth.dto';
+import { RegisterBodyDto, RegisterResponseDto, SendOTPBodyDTO } from './DTO/auth.dto';
 import { ZodSerializerDto } from 'nestjs-zod';
 
 
@@ -12,6 +12,11 @@ export class AuthController {
   @ZodSerializerDto(RegisterResponseDto)
   async register(@Body() body: RegisterBodyDto) {
     return await this.authService.register(body);
+  }
+
+  @Post('otp')
+  async sendOTP(@Body() body: SendOTPBodyDTO) {
+    return await this.authService.sendOTP(body);
   }
 
   // @Post('login')
