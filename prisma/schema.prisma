@@ -30,6 +30,7 @@ enum VerificationCodeType {
 // Trạng thái người dùng - quản lý quyền truy cập của user
 enum UserStatus {
   ACTIVE  // Hoạt động bình thường
+  INACTIVE // Tạm ngưng hoạt động
   BLOCKED // Bị khóa tài khoản
 }
 
@@ -86,15 +87,15 @@ model User {
   status      UserStatus @default(ACTIVE)
 
   // Role-based access control
-  roleId Int?
-  role Role? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  roleId Int
+  role Role @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   // Audit fields
   createdById Int?
   updatedById Int?
-  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
 
   // Self-referencing relations cho audit
   createdBy User? @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -180,12 +181,13 @@ model UserTranslation {
 // Phục vụ cho tính năng: email verification, password reset
 model VerificationCode {
   id        Int                  @id @default(autoincrement())
-  email     String               @db.VarChar(255)
+  email     String               @unique @db.VarChar(255)  
   code      String               @db.VarChar(10) // Mã OTP
   type      VerificationCodeType // Phân loại mục đích sử dụng
   expiresAt DateTime             // Thời gian hết hạn
   createdAt DateTime             @default(now())
 
+  
   @@index([email, code, type]) // Tối ưu query verification
   @@index([expiresAt]) // Tối ưu cleanup expired codes
   @@map("VerificationCode")
@@ -196,8 +198,8 @@ model VerificationCode {
 model RefreshToken {
   token     String   @id @db.VarChar(500) // JWT token
   userId    Int
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  createdAt DateTime? @default(now())
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
