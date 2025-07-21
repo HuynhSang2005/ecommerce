@@ -13,6 +13,7 @@ export const RegisterBodySchema = UserSchema
   .extend({
     phoneNumber: z.string().min(9).max(15).optional(),
     confirmPassword: z.string().min(6).max(100),
+    code: z.string().length(6)
   })
   .strict()
   .superRefine(({ password, confirmPassword }, ctx) => {

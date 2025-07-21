@@ -1,5 +1,3 @@
-// This is your Prisma schema file,
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -184,6 +182,7 @@ model VerificationCode {
   email     String               @unique @db.VarChar(255)  
   code      String               @db.VarChar(10) // Mã OTP
   type      VerificationCodeType // Phân loại mục đích sử dụng
+  
   expiresAt DateTime             // Thời gian hết hạn
   createdAt DateTime             @default(now())
 

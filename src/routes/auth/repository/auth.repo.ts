@@ -13,7 +13,8 @@ export class AuthRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
   async createUser(
-    userData: Omit<RegisterBodyType, 'confirmPassword'> & Pick<UserType, 'roleId'>,
+    userData: Omit<RegisterBodyType, 'confirmPassword' | 'code'> &
+      Pick<UserType, 'roleId'>,
   ): Promise<RegisterResponseType> {
     const user = await this.prismaService.user.create({
       data: userData,
@@ -36,7 +37,7 @@ export class AuthRepository {
       },
     });
 
-    // Transform dates to strings 
+    // Transform dates to strings
     const result = {
       ...user,
       status: user.status as UserStatus,
@@ -55,7 +56,10 @@ export class AuthRepository {
   }
 
   async createVerificationCode(
-    payload: Pick<VerificationCodeType, 'email' | 'type' | 'code' | 'expiresAt'>
+    payload: Pick<
+      VerificationCodeType,
+      'email' | 'type' | 'code' | 'expiresAt'
+    >,
   ): Promise<VerificationCodeType> {
     return this.prismaService.verificationCode.upsert({
       where: {
@@ -65,18 +69,22 @@ export class AuthRepository {
       update: {
         code: payload.code,
         expiresAt: payload.expiresAt,
-      }
+      },
     });
   }
 
-  async findUniqueVerificationCode(uniqueVale: {email: string} | {id: number} | {
-    email: string; 
-    code: string;
-    type: TypeOfVerificationCodeType;
-  }): Promise<VerificationCodeType | null> {
+  async findUniqueVerificationCode(
+    uniqueVale:
+      | { email: string }
+      | { id: number }
+      | {
+          email: string;
+          code: string;
+          type: TypeOfVerificationCodeType;
+        },
+  ): Promise<VerificationCodeType | null> {
     return this.prismaService.verificationCode.findUnique({
       where: uniqueVale,
-    })
+    });
   }
-
 }

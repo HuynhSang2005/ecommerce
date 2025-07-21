@@ -5,11 +5,17 @@ import {
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
+  UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { HashingService } from '../../shared/services/hashing.service';
 import { TokenService } from '../../shared/services/token.service';
+import { VerificationCodeType } from '@prisma/client';
 import { AuthTokens } from '../../shared/types/jwt.type';
-import { generateOTP, isNotFoundPrismaError, isUniqueConstraintPrismaError } from '../../shared/types/helper';
+import {
+  generateOTP,
+  isNotFoundPrismaError,
+  isUniqueConstraintPrismaError,
+} from '../../shared/types/helper';
 import { RoleService } from './role.service';
 import { RegisterBodyType, SendOTPBodyType } from './auth.model';
 import { AuthRepository } from './repository/auth.repo';
@@ -17,6 +23,7 @@ import { SharedUserRepository } from 'src/shared/repositories/shared-user.repo';
 import { addMilliseconds } from 'date-fns';
 import ms from 'ms';
 import envConfig from 'src/shared/config';
+import path from 'path';
 
 @Injectable()
 export class AuthService {
@@ -25,7 +32,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly authRepository: AuthRepository,
     private readonly roleService: RoleService,
-    private readonly shareUserRepository: SharedUserRepository
+    private readonly shareUserRepository: SharedUserRepository,
   ) {}
 
   // async generateToken(payload: { userId: number }): Promise<AuthTokens> {
@@ -41,10 +48,10 @@ export class AuthService {
 
   //     },
   //   });
-    
+
   //   return { accessToken, refreshToken };
   // }
-  
+
   // async refreshToken(refreshToken: string) {
   //   try {
   //     const {userId} = await this.tokenService.verifyRefreshToken(refreshToken);
@@ -69,21 +76,44 @@ export class AuthService {
   //   }
   // }
 
-async register(body: RegisterBodyType) {
-  const hashedPassword = await this.hashingService.hash(body.password);
+  async register(body: RegisterBodyType) {
+    const hashedPassword = await this.hashingService.hash(body.password);
 
-  try {
-    const clientRoleId = await this.roleService.getClientRoles();
-    
-    const { confirmPassword, ...userData } = body;
-    
-    return await this.authRepository.createUser({
-      ...userData,
-      password: hashedPassword,
-      roleId: clientRoleId,
-    });
-    
-  } catch (error) {
+    try {
+      const verificationCode =
+        await this.authRepository.findUniqueVerificationCode({
+          email: body.email,
+          code: body.code,
+          type: VerificationCodeType.REGISTER,
+        });
+
+      if (!verificationCode) {
+        throw new UnprocessableEntityException([
+          {
+            message: 'Mã OTP xác minh không hợp lệ hoặc đã hết hạn.',
+            path: 'code',
+          },
+        ]);
+      }
+      if(verificationCode.expiresAt < new Date()) {
+        throw new UnsupportedMediaTypeException([
+          {
+            message: 'Mã OTP xác minh đã hết hạn.',
+            path: 'code',
+          }
+        ])
+      }
+
+      const clientRoleId = await this.roleService.getClientRoles();
+
+      const { confirmPassword, ...userData } = body;
+
+      return await this.authRepository.createUser({
+        ...userData,
+        password: hashedPassword,
+        roleId: clientRoleId,
+      });
+    } catch (error) {
       if (isUniqueConstraintPrismaError(error)) {
         const target = error.meta?.target as string[] | undefined;
         if (target?.includes('email')) {
@@ -91,37 +121,37 @@ async register(body: RegisterBodyType) {
         }
         throw new ConflictException('Thông tin đăng ký bị trùng lặp.');
       }
-      
-      console.error("Lỗi Prisma khi đăng ký:", error);
+
+      console.error('Lỗi Prisma khi đăng ký:', error);
       throw new UnprocessableEntityException([
-      {
-        message: 'Email đã được sử dụng hoặc thông tin đăng ký không hợp lệ.',
-        path: 'email',
-      }
-      ]); 
+        {
+          message: 'Email đã được sử dụng hoặc thông tin đăng ký không hợp lệ.',
+          path: 'email',
+        },
+      ]);
     }
-}
+  }
   async sendOTP(body: SendOTPBodyType) {
     const user = await this.shareUserRepository.findUnique({
       email: body.email,
     });
     if (user) {
       throw new UnprocessableEntityException([
-      {
-        message: 'Email đã được sử dụng hoặc thông tin đăng ký không hợp lệ.',
-        path: 'email',
-      }
-      ]); 
+        {
+          message: 'Email đã được sử dụng hoặc thông tin đăng ký không hợp lệ.',
+          path: 'email',
+        },
+      ]);
     }
-    
+
     const code = generateOTP();
     const verificationCode = this.authRepository.createVerificationCode({
       email: body.email,
       type: body.type,
       code,
-      expiresAt: addMilliseconds(new Date(), ms(envConfig.OTP_EXPIRES_IN)), 
-    })
-    
+      expiresAt: addMilliseconds(new Date(), ms(envConfig.OTP_EXPIRES_IN)),
+    });
+
     return verificationCode;
   }
 
@@ -166,6 +196,4 @@ async register(body: RegisterBodyType) {
   //     throw new UnauthorizedException('Đăng xuất không thành công.');
   //   }
   // }
-
-
 }

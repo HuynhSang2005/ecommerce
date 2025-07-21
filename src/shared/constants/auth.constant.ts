@@ -17,4 +17,4 @@ export const ConditionGuard = {
 
 export type ConditionGuardType = (typeof ConditionGuard)[keyof typeof ConditionGuard]
 
-export type TypeOfVerificationCodeType = (typeof VerificationCodeType)[keyof typeof VerificationCodeType]
+export type TypeOfVerificationCodeType = (typeof VerificationCodeType)[keyof typeof VerificationCodeType] 
